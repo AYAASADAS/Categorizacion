@@ -166,6 +166,11 @@
             </div>
         </div>
         <button type="button" class="boton" onclick="agregarResponsable()">Agregar otro responsable</button>
+<!-- AQUI AGREGÁS EL NUEVO BOTÓN -->
+<button type="button" class="boton" style="background:#b80000;margin-top:4px;" onclick="resetearCuestionario()">
+    Comenzar desde cero
+</button>
+<!-- FIN DEL NUEVO BOTÓN -->
         <div class="nav">
             <button type="button" class="boton" onclick="avanzarPagina(1)">Siguiente</button>
         </div>
@@ -182,6 +187,7 @@
         <div id="cuadro-informativo-categorias"></div>
         <div id="detalle-preguntas"></div>
         <div class="nav">
+<button type="button" class="boton" onclick="resetearCuestionario()">Comenzar desde cero</button>
             <button type="button" class="boton" onclick="volverARespuestas()">Volver</button>
             <button type="button" class="boton" id="btnPDF" onclick="exportarPDF()">exportar resultado a PDF</button>
         </div>
@@ -843,12 +849,214 @@ function exportarPDF() {
         });
 }
 
+function resetearCuestionario() {
+    if (!confirm('¿Está seguro que desea comenzar desde cero? Se perderán todas las respuestas.')) return;
+
+    // Borra almacenamiento local si usás localStorage (pronto te ayudo a agregarlo)
+    // localStorage.removeItem('categorizacion_respuestas');
+
+    // Limpia los campos del formulario de información general
+    document.getElementById('fecha').value = "";
+    document.getElementById('asada').value = "";
+    document.getElementById('region').value = "";
+    document.getElementById('provincia').value = "";
+    document.getElementById('canton').value = "";
+    document.getElementById('distrito').value = "";
+    document.getElementById('telefono').value = "";
+    document.getElementById('conexiones').value = "";
+    document.getElementById('comunidades').value = "";
+
+    // Elimina responsables adicionales y deja solo uno vacío
+    const responsables = document.getElementById('responsables');
+    responsables.innerHTML = `
+        <div class="responsable">
+            <label>Puesto <span class="obligatorio">*</span>:</label>
+            <input type="text" name="puesto[]" required><br>
+            <label>Nombre <span class="obligatorio">*</span>:</label>
+            <input type="text" name="nombre[]" required>
+        </div>
+    `;
+
+    // Borra todas las respuestas
+    respuestas = {};
+
+    // Vuelve a la primera página
+    mostrarPagina(0);
+}
 
 // ==== Inicialización ====
 // Cargar primeras secciones
 window.onload = function() {
     mostrarPagina(0);
 };
+// =============================
+// === LOCALSTORAGE GUARDADO ===
+// =============================
+
+// --- Guardar estado en localStorage ---
+function guardarProgreso() {
+    // Guardar información general
+    const info = {
+        fecha: document.getElementById('fecha').value,
+        asada: document.getElementById('asada').value,
+        region: document.getElementById('region').value,
+        provincia: document.getElementById('provincia').value,
+        canton: document.getElementById('canton').value,
+        distrito: document.getElementById('distrito').value,
+        telefono: document.getElementById('telefono').value,
+        conexiones: document.getElementById('conexiones').value,
+        comunidades: document.getElementById('comunidades').value,
+        responsables: []
+    };
+    let puestos = document.getElementsByName('puesto[]');
+    let nombres = document.getElementsByName('nombre[]');
+    for (let i = 0; i < puestos.length; i++) {
+        info.responsables.push({
+            puesto: puestos[i].value,
+            nombre: nombres[i].value
+        });
+    }
+    // Guardar respuestas de todos los ejes
+    localStorage.setItem('progreso_asada', JSON.stringify({
+        info: info,
+        respuestas: respuestas
+    }));
+}
+
+// --- Cargar estado desde localStorage ---
+function cargarProgreso() {
+    let guardado = localStorage.getItem('progreso_asada');
+    if (!guardado) return;
+    let data = JSON.parse(guardado);
+
+    // Cargar información general
+    let info = data.info || {};
+    document.getElementById('fecha').value = info.fecha || '';
+    document.getElementById('asada').value = info.asada || '';
+    document.getElementById('region').value = info.region || '';
+    document.getElementById('provincia').value = info.provincia || '';
+    document.getElementById('canton').value = info.canton || '';
+    document.getElementById('distrito').value = info.distrito || '';
+    document.getElementById('telefono').value = info.telefono || '';
+    document.getElementById('conexiones').value = info.conexiones || '';
+    document.getElementById('comunidades').value = info.comunidades || '';
+
+    // Quitar responsables extra antes de cargar
+    let divResp = document.getElementById('responsables');
+    divResp.innerHTML = '';
+    if (info.responsables && info.responsables.length > 0) {
+        info.responsables.forEach((r, idx) => {
+            let div = document.createElement('div');
+            div.className = 'responsable';
+            div.innerHTML = `
+                <label>Puesto <span class="obligatorio">*</span>:</label>
+                <input type="text" name="puesto[]" required value="${r.puesto || ''}"><br>
+                <label>Nombre <span class="obligatorio">*</span>:</label>
+                <input type="text" name="nombre[]" required value="${r.nombre || ''}">
+                ${idx > 0 ? '<button type="button" class="boton" onclick="this.parentNode.remove()">Quitar</button>' : ''}
+            `;
+            divResp.appendChild(div);
+        });
+    } else {
+        // Si no hay, dejar uno vacío
+        let div = document.createElement('div');
+        div.className = 'responsable';
+        div.innerHTML = `
+            <label>Puesto <span class="obligatorio">*</span>:</label>
+            <input type="text" name="puesto[]" required><br>
+            <label>Nombre <span class="obligatorio">*</span>:</label>
+            <input type="text" name="nombre[]" required>
+        `;
+        divResp.appendChild(div);
+    }
+
+    // Cargar respuestas
+    respuestas = data.respuestas || {};
+
+    // Volver a la última página (si querés, puedes guardar también el número de página actual)
+    mostrarPagina(paginaActual);
+}
+
+// --- Borrar progreso ---
+function borrarProgreso() {
+    localStorage.removeItem('progreso_asada');
+}
+
+// === Auto-guardado cada vez que se hace un cambio ===
+// - Información general
+document.addEventListener('input', function(e) {
+    if (e.target.closest('#pagina-general')) {
+        guardarProgreso();
+    }
+});
+// - Respuestas de ejes
+window.seleccionarOpcion = function(ejeIdx, pregIdx, val) {
+    if (!respuestas[ejeIdx]) respuestas[ejeIdx] = [];
+    respuestas[ejeIdx][pregIdx] = parseInt(val);
+    actualizarResultadosEje(ejeIdx);
+
+    // Actualizar bloqueo y renderizado incentivos si existe
+    const idxIncentivos = EJES.findIndex(e => e.nombre === "Incentivos");
+    if (idxIncentivos !== -1) {
+        actualizarBloqueoIncentivos(idxIncentivos);
+    }
+    // Si estamos en incentivos, refrescar la página de incentivos para que UI quede bien
+    if (ejeIdx === idxIncentivos) {
+        renderizarEje(idxIncentivos);
+    }
+    guardarProgreso(); // <--- Nuevo: guarda cada vez que alguien responde
+}
+
+// --- También guardar cada vez que se agrega o quita responsable
+window.agregarResponsable = function() {
+    const responsables = document.getElementById('responsables');
+    const div = document.createElement('div');
+    div.className = 'responsable';
+    div.innerHTML = `
+        <label>Puesto <span class="obligatorio">*</span>:</label>
+        <input type="text" name="puesto[]" required><br>
+        <label>Nombre <span class="obligatorio">*</span>:</label>
+        <input type="text" name="nombre[]" required>
+        <button type="button" class="boton" onclick="this.parentNode.remove(); guardarProgreso();">Quitar</button>
+    `;
+    responsables.appendChild(div);
+    guardarProgreso();
+};
+
+// --- Cuando se borra todo desde el botón “Empezar desde cero” ---
+window.empezarDesdeCero = function() {
+    if (!confirm("¿Seguro que desea borrar todo y empezar de nuevo?")) return;
+    respuestas = {};
+    borrarProgreso();
+    // Limpiar todos los campos del formulario y volver al inicio
+    document.getElementById('fecha').value = '';
+    document.getElementById('asada').value = '';
+    document.getElementById('region').value = '';
+    document.getElementById('provincia').value = '';
+    document.getElementById('canton').value = '';
+    document.getElementById('distrito').value = '';
+    document.getElementById('telefono').value = '';
+    document.getElementById('conexiones').value = '';
+    document.getElementById('comunidades').value = '';
+    // Responsables: dejar solo uno vacío
+    let divResp = document.getElementById('responsables');
+    divResp.innerHTML = '';
+    let div = document.createElement('div');
+    div.className = 'responsable';
+    div.innerHTML = `
+        <label>Puesto <span class="obligatorio">*</span>:</label>
+        <input type="text" name="puesto[]" required><br>
+        <label>Nombre <span class="obligatorio">*</span>:</label>
+        <input type="text" name="nombre[]" required>
+    `;
+    divResp.appendChild(div);
+    mostrarPagina(0);
+};
+
+window.addEventListener('DOMContentLoaded', function() {
+    cargarProgreso();
+});
+
 
 </script>
 </body>
