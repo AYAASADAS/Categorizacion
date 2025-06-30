@@ -191,6 +191,39 @@
 <script>
 // ==== Estructura de todos los ejes ====
 // (igual que antes, solo el eje de saneamiento no se valida como obligatorio)
+// === FUNCIÓN PARA COLOREAR EL % OBTENIDO SEGÚN EL EJE Y LA REGLA QUE PIDIÓ DAVID ===
+function colorPorcentajeObtenido(ejeNombre, porcentaje, maxPorcentaje, respuestaSeleccionada, pregunta) {
+    const principales = [
+        "Gestión Comercial", "Gestión Comunal",
+        "Gestión Ambiental y de Recurso Hídrico",
+        "Gestión de Sistemas de Agua",
+        "Gestión Administrativa Financiera"
+    ];
+    if (principales.includes(ejeNombre)) {
+        if (porcentaje === 0) return "roja";
+        if (Math.abs(porcentaje - maxPorcentaje) < 0.0001) return "verde";
+        if (porcentaje > 0 && porcentaje < maxPorcentaje) return "naranja";
+        return "";
+    }
+    if (ejeNombre === "Gestión de Saneamiento") {
+        // Solo marcar en rojo el cero si fue respondido (respuestaSeleccionada != null)
+        if (respuestaSeleccionada != null && porcentaje === 0) return "roja";
+        if (respuestaSeleccionada != null && Math.abs(porcentaje - maxPorcentaje) < 0.0001) return "verde";
+        if (respuestaSeleccionada != null && porcentaje > 0 && porcentaje < maxPorcentaje) return "naranja";
+        return "";
+    }
+    if (ejeNombre === "Variables de Riesgo") {
+        if (pregunta.porcentaje < 0 && respuestaSeleccionada === 1) return "roja";
+        return "";
+    }
+    if (ejeNombre === "Incentivos") {
+        if (porcentaje > 0) return "verde";
+        return "";
+    }
+    return "";
+}
+
+
 const EJES = [
     {
         nombre: "Gestión Comercial",
@@ -497,28 +530,42 @@ function actualizarResultadosEje(ejeIdx) {
     const incentivosBloqueados = (eje.nombre === "Incentivos") && !puedeResponderIncentivos();
 
     for (let i = 0; i < eje.preguntas.length; i++) {
-        const q = eje.preguntas[i];
-        let val = respuestas[ejeIdx] && respuestas[ejeIdx][i] !== undefined ? respuestas[ejeIdx][i] : null;
-        let puntos = 0, porcentaje = 0;
-        if (val !== null) {
-            puntos = (q.porcentaje < 0)
-                ? (q.opciones.length === 2 && val === 1 ? 1 : 0)
-                : val;
-            if (q.porcentaje < 0) { // Pregunta de sanción
-                porcentaje = (puntos === 1) ? q.porcentaje : 0;
-            } else {
-                porcentaje = ((puntos / q.puntos) * q.porcentaje);
-            }
-
-            // Si está bloqueado incentivos, no sumar puntos ni porcentaje
-            if (!incentivosBloqueados) {
-                total_puntos += puntos;
-                total_porcentaje += porcentaje;
-            }
+    const q = eje.preguntas[i];
+    let val = respuestas[ejeIdx] && respuestas[ejeIdx][i] !== undefined ? respuestas[ejeIdx][i] : null;
+    let puntos = 0, porcentaje = 0;
+    if (val !== null) {
+        puntos = (q.porcentaje < 0)
+            ? (q.opciones.length === 2 && val === 1 ? 1 : 0)
+            : val;
+        if (q.porcentaje < 0) { // Pregunta de sanción
+            porcentaje = (puntos === 1) ? q.porcentaje : 0;
+        } else {
+            porcentaje = ((puntos / q.puntos) * q.porcentaje);
         }
-        document.getElementById(`porcentaje-obtenido-${ejeIdx}-${i}`).textContent = `Obtenido: ${incentivosBloqueados ? "0.00" : porcentaje.toFixed(2)}%`;
-        total_puntos_max += q.puntos;
+
+        // Si está bloqueado incentivos, no sumar puntos ni porcentaje
+        if (!incentivosBloqueados) {
+            total_puntos += puntos;
+            total_porcentaje += porcentaje;
+        }
     }
+
+    // === COLORES PERSONALIZADOS ===
+    const claseColor = colorPorcentajeObtenido(
+        eje.nombre, 
+        incentivosBloqueados ? 0 : porcentaje,
+        Math.abs(q.porcentaje),
+        val,
+        q
+    );
+    const elemPorc = document.getElementById(`porcentaje-obtenido-${ejeIdx}-${i}`);
+    if (elemPorc) {
+        elemPorc.textContent = `Obtenido: ${incentivosBloqueados ? "0.00" : porcentaje.toFixed(2)}%`;
+        elemPorc.className = "porcentaje" + (claseColor ? " " + claseColor : "");
+    }
+    total_puntos_max += q.puntos;
+}
+
     document.getElementById(`total-puntos-${ejeIdx}`).textContent = incentivosBloqueados ? "0" : total_puntos;
     document.getElementById(`total-porcentaje-${ejeIdx}`).textContent = incentivosBloqueados ? "0.00%" : `${total_porcentaje.toFixed(2)}%`;
 }
@@ -694,26 +741,37 @@ totalPercent = Math.min(totalPercent, 100);
         <tbody>`;
         let subtotal = 0;
         for (let i = 0; i < eje.preguntas.length; i++) {
-            let q = eje.preguntas[i];
-            let val = respuestas[idx] && respuestas[idx][i] !== undefined ? respuestas[idx][i] : null;
-            let respuestaStr = (val !== null) ? q.opciones[val] : '-';
-            let puntos = 0, porcentaje = 0;
-            if (val !== null) {
-                puntos = (q.porcentaje < 0)
-                    ? (q.opciones.length === 2 && val === 1 ? 1 : 0)
-                    : val;
-                porcentaje = (q.porcentaje < 0)
-                    ? (puntos === 1 ? q.porcentaje : 0)
-                    : ((puntos / q.puntos) * q.porcentaje);
-            }
-            subtotal += porcentaje;
-            htmlDetalle += `<tr>
-                <td>${i+1}</td>
-                <td class="${q.color}">${q.texto}</td>
-                <td>${respuestaStr}</td>
-                <td style="text-align:center;">${porcentaje.toFixed(2)}%</td>
-            </tr>`;
-        }
+    let q = eje.preguntas[i];
+    let val = respuestas[idx] && respuestas[idx][i] !== undefined ? respuestas[idx][i] : null;
+    let respuestaStr = (val !== null) ? q.opciones[val] : '-';
+    let puntos = 0, porcentaje = 0;
+    if (val !== null) {
+        puntos = (q.porcentaje < 0)
+            ? (q.opciones.length === 2 && val === 1 ? 1 : 0)
+            : val;
+        porcentaje = (q.porcentaje < 0)
+            ? (puntos === 1 ? q.porcentaje : 0)
+            : ((puntos / q.puntos) * q.porcentaje);
+    }
+    subtotal += porcentaje;
+
+    // ==== COLORES DETALLE ====
+    const claseColorDetalle = colorPorcentajeObtenido(
+        eje.nombre,
+        porcentaje,
+        Math.abs(q.porcentaje),
+        val,
+        q
+    );
+
+    htmlDetalle += `<tr>
+        <td>${i+1}</td>
+        <td class="${q.color}">${q.texto}</td>
+        <td>${respuestaStr}</td>
+        <td style="text-align:center;" class="${claseColorDetalle}">${porcentaje.toFixed(2)}%</td>
+    </tr>`;
+}
+
         htmlDetalle += `<tr class="subtotal">
             <td colspan="3">Subtotal</td>
             <td style="text-align:center;">${subtotal.toFixed(2)}%</td>
